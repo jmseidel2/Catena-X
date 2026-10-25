@@ -40,7 +40,7 @@ button:disabled{opacity:.6;cursor:wait}
 </main>
 <script>
 (function(){
-  var CFG = {"salt": "Hzk/I1OfltCIaEftIs7HAg==", "iter": 600000, "app": "app.enc"};
+  var CFG = {"salt": "Hzk/I1OfltCIaEftIs7HAg==", "iter": 600000, "app": "app.enc", "keyring": "keyring.enc"};
   var KEY_STORE = "cxf-unlock-key";
   function b64(s){ return Uint8Array.from(atob(s), function(c){ return c.charCodeAt(0); }); }
   function err(t){ document.getElementById("err").textContent = t; }
@@ -48,10 +48,19 @@ button:disabled{opacity:.6;cursor:wait}
     var base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
     return crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(CFG.salt), iterations: CFG.iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
   }
+  async function openBlob(buf, priv){
+    var u = new Uint8Array(buf), L = (u[3] << 8) | u[4];
+    var raw = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, priv, u.slice(5, 5 + L));
+    var k = await crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+    return crypto.subtle.decrypt({ name: "AES-GCM", iv: u.slice(5 + L, 17 + L) }, k, u.slice(17 + L));
+  }
   async function openApp(key){
+    var kr = new Uint8Array(await (await fetch(CFG.keyring, { cache: "no-cache" })).arrayBuffer());
+    var der = await crypto.subtle.decrypt({ name: "AES-GCM", iv: kr.slice(0, 12) }, key, kr.slice(12));
+    var priv = await crypto.subtle.importKey("pkcs8", der, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
     var buf = await (await fetch(CFG.app, { cache: "no-cache" })).arrayBuffer();
-    var plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(buf, 0, 12) }, key, new Uint8Array(buf, 12));
-    window.__cxfKey = key;
+    var plain = await openBlob(buf, priv);
+    window.__cxfKey = key; window.__acadPriv = priv;
     var html = new TextDecoder().decode(plain);
     var tpl = document.createElement("template"); tpl.innerHTML = html;
     var scripts = [];
