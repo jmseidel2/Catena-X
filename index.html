@@ -79,9 +79,10 @@ button:disabled{opacity:.6;cursor:wait}
     ev.preventDefault();
     var btn = document.getElementById("go"); btn.disabled = true; btn.textContent = "Unlocking"; err("");
     try {
+      var keep = !!(document.getElementById("keep") && document.getElementById("keep").checked);
       var key = await derive(document.getElementById("pw").value);
       await openApp(key);
-      if (document.getElementById("keep") && document.getElementById("keep").checked) {
+      if (keep) {
         var raw = new Uint8Array(await crypto.subtle.exportKey("raw", key));
         try { localStorage.setItem(KEY_STORE, btoa(String.fromCharCode.apply(null, raw))); } catch (e) {}
       }
